@@ -23,6 +23,7 @@
             this.cmbParameter = new System.Windows.Forms.ComboBox();
             this.btnGenerateReport = new System.Windows.Forms.Button();
             this.reportDataGridView = new System.Windows.Forms.DataGridView();
+            this.btnExportCsv = new System.Windows.Forms.Button(); // Новая кнопка
             ((System.ComponentModel.ISupportInitialize)(this.reportDataGridView)).BeginInit();
             this.SuspendLayout();
             // 
@@ -53,7 +54,7 @@
             this.lblParameter.Size = new System.Drawing.Size(65, 15);
             this.lblParameter.TabIndex = 2;
             this.lblParameter.Text = "Параметр:";
-            this.lblParameter.Visible = false; // Изначально скрыт
+            this.lblParameter.Visible = false;
             // 
             // cmbParameter
             // 
@@ -63,7 +64,7 @@
             this.cmbParameter.Name = "cmbParameter";
             this.cmbParameter.Size = new System.Drawing.Size(350, 23);
             this.cmbParameter.TabIndex = 3;
-            this.cmbParameter.Visible = false; // Изначально скрыт
+            this.cmbParameter.Visible = false;
             // 
             // btnGenerateReport
             // 
@@ -88,14 +89,26 @@
             this.reportDataGridView.Name = "reportDataGridView";
             this.reportDataGridView.ReadOnly = true;
             this.reportDataGridView.RowTemplate.Height = 25;
-            this.reportDataGridView.Size = new System.Drawing.Size(760, 358);
+            this.reportDataGridView.Size = new System.Drawing.Size(760, 318);
             this.reportDataGridView.TabIndex = 5;
+            // 
+            // btnExportCsv
+            // 
+            this.btnExportCsv.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnExportCsv.Location = new System.Drawing.Point(622, 404);
+            this.btnExportCsv.Name = "btnExportCsv";
+            this.btnExportCsv.Size = new System.Drawing.Size(150, 30);
+            this.btnExportCsv.TabIndex = 6;
+            this.btnExportCsv.Text = "Экспорт в CSV (Excel)...";
+            this.btnExportCsv.UseVisualStyleBackColor = true;
+            this.btnExportCsv.Click += new System.EventHandler(this.BtnExportCsv_Click);
             // 
             // ReportsForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(784, 450);
+            this.ClientSize = new System.Drawing.Size(784, 446);
+            this.Controls.Add(this.btnExportCsv);
             this.Controls.Add(this.reportDataGridView);
             this.Controls.Add(this.btnGenerateReport);
             this.Controls.Add(this.cmbParameter);
@@ -103,6 +116,7 @@
             this.Controls.Add(this.cmbReportType);
             this.Controls.Add(this.labelReportType);
             this.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point);
+            this.MinimumSize = new System.Drawing.Size(640, 480);
             this.Name = "ReportsForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Сводные отчеты";
@@ -110,6 +124,7 @@
             ((System.ComponentModel.ISupportInitialize)(this.reportDataGridView)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
+
         }
 
         #endregion
@@ -120,5 +135,6 @@
         private ComboBox cmbParameter;
         private Button btnGenerateReport;
         private DataGridView reportDataGridView;
+        private Button btnExportCsv;
     }
 }

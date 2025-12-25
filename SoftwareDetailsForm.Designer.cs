@@ -37,6 +37,7 @@
             this.btnDeleteImage = new System.Windows.Forms.Button();
             this.btnLoadImage = new System.Windows.Forms.Button();
             this.picScreenshot = new System.Windows.Forms.PictureBox();
+            this.chkIsFree = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.numSize)).BeginInit();
             this.groupBoxScreenshot.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.picScreenshot)).BeginInit();
@@ -71,7 +72,8 @@
             // 
             // cmbCategory
             // 
-            this.cmbCategory.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            // ИЗМЕНЕНИЕ: Разрешаем ввод текста
+            this.cmbCategory.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
             this.cmbCategory.FormattingEnabled = true;
             this.cmbCategory.Location = new System.Drawing.Point(150, 39);
             this.cmbCategory.Name = "cmbCategory";
@@ -89,7 +91,8 @@
             // 
             // cmbDeveloper
             // 
-            this.cmbDeveloper.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            // ИЗМЕНЕНИЕ: Разрешаем ввод текста
+            this.cmbDeveloper.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
             this.cmbDeveloper.FormattingEnabled = true;
             this.cmbDeveloper.Location = new System.Drawing.Point(150, 68);
             this.cmbDeveloper.Name = "cmbDeveloper";
@@ -173,10 +176,10 @@
             // btnSave
             // 
             this.btnSave.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSave.Location = new System.Drawing.Point(556, 339);
+            this.btnSave.Location = new System.Drawing.Point(566, 379);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(100, 30);
-            this.btnSave.TabIndex = 14;
+            this.btnSave.TabIndex = 15;
             this.btnSave.Text = "Сохранить";
             this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.BtnSave_Click);
@@ -185,10 +188,10 @@
             // 
             this.btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.btnCancel.Location = new System.Drawing.Point(662, 339);
+            this.btnCancel.Location = new System.Drawing.Point(672, 379);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 30);
-            this.btnCancel.TabIndex = 15;
+            this.btnCancel.TabIndex = 16;
             this.btnCancel.Text = "Отмена";
             this.btnCancel.UseVisualStyleBackColor = true;
             // 
@@ -202,15 +205,15 @@
             this.groupBoxScreenshot.Controls.Add(this.picScreenshot);
             this.groupBoxScreenshot.Location = new System.Drawing.Point(478, 39);
             this.groupBoxScreenshot.Name = "groupBoxScreenshot";
-            this.groupBoxScreenshot.Size = new System.Drawing.Size(294, 283);
-            this.groupBoxScreenshot.TabIndex = 16;
+            this.groupBoxScreenshot.Size = new System.Drawing.Size(294, 323);
+            this.groupBoxScreenshot.TabIndex = 17;
             this.groupBoxScreenshot.TabStop = false;
             this.groupBoxScreenshot.Text = "Скриншот";
             // 
             // btnDeleteImage
             // 
             this.btnDeleteImage.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnDeleteImage.Location = new System.Drawing.Point(188, 245);
+            this.btnDeleteImage.Location = new System.Drawing.Point(188, 285);
             this.btnDeleteImage.Name = "btnDeleteImage";
             this.btnDeleteImage.Size = new System.Drawing.Size(100, 32);
             this.btnDeleteImage.TabIndex = 2;
@@ -221,7 +224,7 @@
             // btnLoadImage
             // 
             this.btnLoadImage.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.btnLoadImage.Location = new System.Drawing.Point(6, 245);
+            this.btnLoadImage.Location = new System.Drawing.Point(6, 285);
             this.btnLoadImage.Name = "btnLoadImage";
             this.btnLoadImage.Size = new System.Drawing.Size(100, 32);
             this.btnLoadImage.TabIndex = 1;
@@ -238,10 +241,20 @@
             this.picScreenshot.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.picScreenshot.Location = new System.Drawing.Point(6, 22);
             this.picScreenshot.Name = "picScreenshot";
-            this.picScreenshot.Size = new System.Drawing.Size(282, 217);
+            this.picScreenshot.Size = new System.Drawing.Size(282, 257);
             this.picScreenshot.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
             this.picScreenshot.TabIndex = 0;
             this.picScreenshot.TabStop = false;
+            // 
+            // chkIsFree
+            // 
+            this.chkIsFree.AutoSize = true;
+            this.chkIsFree.Location = new System.Drawing.Point(150, 328);
+            this.chkIsFree.Name = "chkIsFree";
+            this.chkIsFree.Size = new System.Drawing.Size(94, 19);
+            this.chkIsFree.TabIndex = 14;
+            this.chkIsFree.Text = "Бесплатная";
+            this.chkIsFree.UseVisualStyleBackColor = true;
             // 
             // SoftwareDetailsForm
             // 
@@ -249,7 +262,8 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(784, 381);
+            this.ClientSize = new System.Drawing.Size(784, 421);
+            this.Controls.Add(this.chkIsFree);
             this.Controls.Add(this.groupBoxScreenshot);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnSave);
@@ -271,7 +285,7 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(800, 420);
+            this.MinimumSize = new System.Drawing.Size(800, 460);
             this.Name = "SoftwareDetailsForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Данные о программе";
@@ -306,5 +320,6 @@
         private Button btnDeleteImage;
         private Button btnLoadImage;
         private PictureBox picScreenshot;
+        private CheckBox chkIsFree;
     }
 }

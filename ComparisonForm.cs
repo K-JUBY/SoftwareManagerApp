@@ -6,9 +6,8 @@ namespace SoftwareManagerApp
 {
     public partial class ComparisonForm : Form
     {
-        private readonly string connectionString = "Server=localhost;Port=5432;UserId=postgres;Password=postgres;Database=software_analogues;";
-
-        // Список ID программ, переданный с главной формы для сравнения.
+        private readonly string connectionString = DbConnectionManager.ConnectionString;
+        // Список ID программ для сравнения, полученный из главной формы.
         private readonly List<int> softwareIdsToCompare;
 
         public ComparisonForm(List<int> softwareIds)
@@ -17,23 +16,22 @@ namespace SoftwareManagerApp
             this.softwareIdsToCompare = softwareIds;
         }
 
-        // Запуск загрузки и отображения данных при открытии формы.
         private void ComparisonForm_Load(object sender, EventArgs e)
         {
             LoadAndDisplayComparisonData();
         }
 
-        // Основной метод для загрузки и "транспонирования" данных для сравнения.
+        // Загружает данные и преобразует их в транспонированный вид для сравнения.
         private void LoadAndDisplayComparisonData()
         {
             try
             {
-                // 1. Загрузка данных в стандартном виде (строки - программы, столбцы - характеристики).
+                // 1. Загрузка данных в стандартную таблицу.
                 DataTable sourceData = new DataTable();
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    // ' = ANY(@ids)' - эффективный способ выборки по массиву ID в PostgreSQL.
+                    // ' = ANY(@ids)' - эффективный способ выборки по массиву ID.
                     string sql = @"SELECT 
                                      s.name, d.developer_name, s.description, s.system_requirements, 
                                      s.size_mb, s.website 
@@ -48,26 +46,24 @@ namespace SoftwareManagerApp
                     }
                 }
 
-                // 2. Создание "перевернутой" таблицы (строки - характеристики, столбцы - программы).
+                // 2. Создание финальной таблицы для сравнения.
                 DataTable comparisonTable = new DataTable();
                 comparisonTable.Columns.Add("Характеристика");
                 foreach (DataRow row in sourceData.Rows)
                 {
-                    // Названия программ становятся заголовками столбцов.
                     comparisonTable.Columns.Add(row["name"].ToString());
                 }
 
-                // 3. Перенос данных из исходной таблицы в транспонированную.
+                // 3. Перенос данных из исходной таблицы в таблицу для сравнения.
                 AddComparisonRow(comparisonTable, sourceData, "Разработчик", "developer_name");
                 AddComparisonRow(comparisonTable, sourceData, "Описание", "description");
                 AddComparisonRow(comparisonTable, sourceData, "Системные требования", "system_requirements");
                 AddComparisonRow(comparisonTable, sourceData, "Объем (МБ)", "size_mb");
                 AddComparisonRow(comparisonTable, sourceData, "Веб-сайт", "website");
 
-                // 4. Назначение подготовленной таблицы в качестве источника данных для DataGridView.
                 comparisonDataGridView.DataSource = comparisonTable;
 
-                // 5. Стилизация первого столбца для лучшей читаемости.
+                // 4. Стилизация первого столбца.
                 if (comparisonDataGridView.Columns.Count > 0)
                 {
                     comparisonDataGridView.Columns[0].DefaultCellStyle.Font = new Font(this.Font, FontStyle.Bold);
@@ -80,12 +76,10 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Вспомогательный метод для формирования одной строки в таблице сравнения.
+        // Вспомогательный метод для формирования строки в таблице сравнения.
         private void AddComparisonRow(DataTable comparisonTable, DataTable sourceData, string propertyName, string dbColumnName)
         {
-            // Создание массива объектов для новой строки. Первым элементом идет название характеристики.
             List<object> rowData = new List<object> { propertyName };
-            // Извлечение нужного значения из каждой строки исходных данных.
             foreach (DataRow sourceRow in sourceData.Rows)
             {
                 rowData.Add(sourceRow[dbColumnName]);

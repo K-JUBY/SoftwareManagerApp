@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualBasic; // Для Interaction.InputBox
+﻿using Microsoft.VisualBasic;
 using Npgsql;
 using System.Data;
 
@@ -6,7 +6,7 @@ namespace SoftwareManagerApp
 {
     public partial class CollectionsManagerForm : Form
     {
-        private readonly string connectionString = "Server=localhost;Port=5432;UserId=postgres;Password=postgres;Database=software_analogues;";
+        private readonly string connectionString = DbConnectionManager.ConnectionString;
 
         public CollectionsManagerForm()
         {
@@ -18,7 +18,7 @@ namespace SoftwareManagerApp
             LoadCollections();
         }
 
-        // Загрузка списка подборок из БД.
+        // Загружает список подборок, принадлежащих текущему пользователю.
         private void LoadCollections()
         {
             listCollections.Items.Clear();
@@ -27,17 +27,20 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT collection_id, collection_name FROM Collections ORDER BY collection_name;";
+                    string sql = "SELECT collection_id, collection_name FROM Collections WHERE user_id = @userId ORDER BY collection_name;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
-                    using (var reader = cmd.ExecuteReader())
                     {
-                        while (reader.Read())
+                        cmd.Parameters.AddWithValue("@userId", CurrentUser.UserId);
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            listCollections.Items.Add(new ComboBoxItem
+                            while (reader.Read())
                             {
-                                Id = reader.GetInt32(0),
-                                Name = reader.GetString(1)
-                            });
+                                listCollections.Items.Add(new ComboBoxItem
+                                {
+                                    Id = reader.GetInt32(0),
+                                    Name = reader.GetString(1)
+                                });
+                            }
                         }
                     }
                 }
@@ -48,10 +51,9 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Создание новой подборки.
+        // Создает новую подборку для текущего пользователя.
         private void BtnAdd_Click(object sender, EventArgs e)
         {
-            // Использование стандартного диалога для ввода текста.
             string newName = Interaction.InputBox("Введите название новой подборки:", "Создание подборки");
             if (string.IsNullOrWhiteSpace(newName)) return;
 
@@ -60,14 +62,15 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "INSERT INTO Collections (collection_name) VALUES (@name);";
+                    string sql = "INSERT INTO Collections (collection_name, user_id) VALUES (@name, @userId);";
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("@name", newName);
+                        cmd.Parameters.AddWithValue("@userId", CurrentUser.UserId);
                         cmd.ExecuteNonQuery();
                     }
                 }
-                LoadCollections();
+                LoadCollections(); // Обновление списка.
             }
             catch (Exception ex)
             {
@@ -75,7 +78,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Переименование существующей подборки.
+        // Переименовывает выбранную подборку.
         private void BtnRename_Click(object sender, EventArgs e)
         {
             if (listCollections.SelectedItem == null)
@@ -109,7 +112,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Удаление подборки.
+        // Удаляет выбранную подборку.
         private void BtnDelete_Click(object sender, EventArgs e)
         {
             if (listCollections.SelectedItem == null)
@@ -127,7 +130,7 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    // Связанные записи из Software_Collections удаляются автоматически благодаря ON DELETE CASCADE в схеме БД.
+                    // Связанные записи из Software_Collections удаляются каскадно.
                     string sql = "DELETE FROM Collections WHERE collection_id = @id;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     {

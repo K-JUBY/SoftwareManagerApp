@@ -9,14 +9,9 @@ namespace SoftwareManagerApp
 {
     public partial class SoftwareDetailsForm : Form
     {
-        private readonly string connectionString = "Server=localhost;Port=5432;UserId=postgres;Password=postgres;Database=software_analogues;";
-
-        // ID редактируемой программы. null, если режим добавления.
+        private readonly string connectionString = DbConnectionManager.ConnectionString;
         private readonly int? softwareIdToEdit;
-
-        // Массив байт текущего изображения для сохранения в БД.
         private byte[]? currentImageData = null;
-        // Флаг для отметки изображения на удаление при сохранении.
         private bool imageMarkedForDeletion = false;
 
         // Конструктор для режима добавления.
@@ -35,7 +30,6 @@ namespace SoftwareManagerApp
             this.Text = "Редактирование программы";
         }
 
-        // Инициализация формы: загрузка справочников и данных (если редактирование).
         private void SoftwareDetailsForm_Load(object sender, EventArgs e)
         {
             LoadCategories();
@@ -48,115 +42,12 @@ namespace SoftwareManagerApp
             }
         }
 
-        #region Работа с изображением
-
-        // Загрузка скриншота из БД.
-        private void LoadScreenshot(int softwareId)
-        {
-            try
-            {
-                using (var conn = new NpgsqlConnection(connectionString))
-                {
-                    conn.Open();
-                    string sql = "SELECT image_data FROM Screenshots WHERE software_id = @id LIMIT 1;";
-                    using (var cmd = new NpgsqlCommand(sql, conn))
-                    {
-                        cmd.Parameters.AddWithValue("@id", softwareId);
-                        var result = cmd.ExecuteScalar();
-
-                        if (result != null && result != DBNull.Value)
-                        {
-                            byte[] imageData = (byte[])result;
-                            this.currentImageData = imageData;
-
-                            // Декодирование изображения с помощью ImageSharp для надежности.
-                            try
-                            {
-                                using (var imageSharp = SixLabors.ImageSharp.Image.Load<Rgba32>(imageData))
-                                using (var ms = new MemoryStream())
-                                {
-                                    imageSharp.SaveAsBmp(ms);
-                                    ms.Position = 0;
-                                    picScreenshot.Image?.Dispose();
-                                    picScreenshot.Image = new System.Drawing.Bitmap(ms);
-                                }
-                            }
-                            catch
-                            {
-                                picScreenshot.Image = null; // В случае ошибки декодирования.
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при загрузке скриншота: {ex.Message}");
-            }
-        }
-
-        // Открытие диалога выбора файла и загрузка изображения.
-        private void BtnLoadImage_Click(object sender, EventArgs e)
-        {
-            using (OpenFileDialog openFileDialog = new OpenFileDialog())
-            {
-                openFileDialog.Title = "Выберите скриншот";
-                openFileDialog.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.gif;*.bmp";
-
-                if (openFileDialog.ShowDialog() == DialogResult.OK)
-                {
-                    try
-                    {
-                        byte[] fileBytes = File.ReadAllBytes(openFileDialog.FileName);
-
-                        // Загрузка через ImageSharp и конвертация в System.Drawing.Bitmap для отображения.
-                        using (Image<Rgba32> imageSharp = SixLabors.ImageSharp.Image.Load<Rgba32>(fileBytes))
-                        {
-                            using (var memoryStream = new MemoryStream())
-                            {
-                                imageSharp.SaveAsBmp(memoryStream);
-                                memoryStream.Position = 0;
-                                picScreenshot.Image?.Dispose();
-                                picScreenshot.Image = new System.Drawing.Bitmap(memoryStream);
-                            }
-                        }
-
-                        this.currentImageData = fileBytes; // Сохраняем исходные байты для записи в БД.
-                        this.imageMarkedForDeletion = false;
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Не удалось открыть файл изображения: {ex.Message}");
-                        currentImageData = null;
-                        picScreenshot.Image?.Dispose();
-                        picScreenshot.Image = null;
-                    }
-                }
-            }
-        }
-
-        // Очистка PictureBox и установка флага на удаление.
-        private void BtnDeleteImage_Click(object sender, EventArgs e)
-        {
-            if (picScreenshot.Image != null)
-            {
-                picScreenshot.Image.Dispose();
-                picScreenshot.Image = null;
-                currentImageData = null;
-                imageMarkedForDeletion = true;
-            }
-        }
-
-        #endregion
-
-        #region Сохранение и загрузка данных
-
-        // Обработчик кнопки "Сохранить".
+        // Обработчик кнопки "Сохранить", основная бизнес-логика формы.
         private void BtnSave_Click(object sender, EventArgs e)
         {
             if (!ValidateInput()) return;
 
-            // Использование транзакции для атомарности операций с основной таблицей и скриншотами.
+            // Использование транзакции для обеспечения целостности данных.
             using (var conn = new NpgsqlConnection(connectionString))
             {
                 conn.Open();
@@ -164,23 +55,24 @@ namespace SoftwareManagerApp
                 {
                     try
                     {
+                        // Получение ID для категории/разработчика. Если их нет - они создаются.
+                        int categoryId = GetOrCreateId("Categories", "category_name", "category_id", cmbCategory.Text, conn, transaction);
+                        int developerId = GetOrCreateId("Developers", "developer_name", "developer_id", cmbDeveloper.Text, conn, transaction);
+
                         int currentSoftwareId;
                         NpgsqlCommand cmd;
 
-                        // Режим добавления (INSERT).
-                        if (softwareIdToEdit == null)
+                        if (softwareIdToEdit == null) // Режим добавления.
                         {
-                            // RETURNING software_id позволяет получить ID новой записи.
-                            string sqlInsert = @"INSERT INTO Software (name, description, system_requirements, size_mb, website, category_id, developer_id) 
-                                               VALUES (@name, @description, @system_req, @size, @website, @cat_id, @dev_id)
+                            string sqlInsert = @"INSERT INTO Software (name, description, system_requirements, size_mb, website, category_id, developer_id, is_free) 
+                                               VALUES (@name, @description, @system_req, @size, @website, @cat_id, @dev_id, @is_free)
                                                RETURNING software_id;";
                             cmd = new NpgsqlCommand(sqlInsert, conn, transaction);
                         }
-                        // Режим редактирования (UPDATE).
-                        else
+                        else // Режим редактирования.
                         {
                             string sqlUpdate = @"UPDATE Software SET name = @name, description = @description, system_requirements = @system_req,
-                                                   size_mb = @size, website = @website, category_id = @cat_id, developer_id = @dev_id
+                                                   size_mb = @size, website = @website, category_id = @cat_id, developer_id = @dev_id, is_free = @is_free
                                                WHERE software_id = @id;";
                             cmd = new NpgsqlCommand(sqlUpdate, conn, transaction);
                             cmd.Parameters.AddWithValue("@id", softwareIdToEdit.Value);
@@ -192,12 +84,13 @@ namespace SoftwareManagerApp
                         cmd.Parameters.AddWithValue("@system_req", txtSystemReq.Text);
                         cmd.Parameters.AddWithValue("@size", numSize.Value);
                         cmd.Parameters.AddWithValue("@website", txtWebsite.Text);
-                        cmd.Parameters.AddWithValue("@cat_id", ((ComboBoxItem)cmbCategory.SelectedItem).Id);
-                        cmd.Parameters.AddWithValue("@dev_id", ((ComboBoxItem)cmbDeveloper.SelectedItem).Id);
+                        cmd.Parameters.AddWithValue("@cat_id", categoryId);
+                        cmd.Parameters.AddWithValue("@dev_id", developerId);
+                        cmd.Parameters.AddWithValue("@is_free", chkIsFree.Checked);
 
                         if (softwareIdToEdit == null)
                         {
-                            currentSoftwareId = (int)cmd.ExecuteScalar();
+                            currentSoftwareId = (int)cmd.ExecuteScalar(); // Получение ID новой записи.
                         }
                         else
                         {
@@ -205,24 +98,48 @@ namespace SoftwareManagerApp
                             currentSoftwareId = softwareIdToEdit.Value;
                         }
 
-                        // Сохранение или удаление скриншота в рамках той же транзакции.
+                        // Обновление скриншота в рамках той же транзакции.
                         SaveScreenshot(conn, transaction, currentSoftwareId);
 
-                        transaction.Commit(); // Фиксация транзакции.
+                        transaction.Commit();
 
                         this.DialogResult = DialogResult.OK;
                         this.Close();
                     }
                     catch (Exception ex)
                     {
-                        transaction.Rollback(); // Откат транзакции в случае ошибки.
+                        transaction.Rollback();
                         MessageBox.Show($"Ошибка при сохранении данных: {ex.Message}");
                     }
                 }
             }
         }
 
-        // Логика сохранения/обновления/удаления скриншота в БД.
+        // Универсальный метод для получения ID из справочника. Если запись не найдена, создает новую.
+        private int GetOrCreateId(string tableName, string nameColumn, string idColumn, string nameValue, NpgsqlConnection conn, NpgsqlTransaction transaction)
+        {
+            // Попытка найти существующую запись.
+            string sqlFind = $"SELECT {idColumn} FROM {tableName} WHERE {nameColumn} ILIKE @name LIMIT 1;";
+            using (var cmdFind = new NpgsqlCommand(sqlFind, conn, transaction))
+            {
+                cmdFind.Parameters.AddWithValue("@name", nameValue);
+                var result = cmdFind.ExecuteScalar();
+                if (result != null && result != DBNull.Value)
+                {
+                    return Convert.ToInt32(result);
+                }
+            }
+
+            // Создание новой записи, если она не была найдена.
+            string sqlInsert = $"INSERT INTO {tableName} ({nameColumn}) VALUES (@name) RETURNING {idColumn};";
+            using (var cmdInsert = new NpgsqlCommand(sqlInsert, conn, transaction))
+            {
+                cmdInsert.Parameters.AddWithValue("@name", nameValue);
+                return (int)cmdInsert.ExecuteScalar();
+            }
+        }
+
+        // Логика сохранения/обновления/удаления скриншота.
         private void SaveScreenshot(NpgsqlConnection conn, NpgsqlTransaction transaction, int softwareId)
         {
             if (imageMarkedForDeletion)
@@ -236,7 +153,6 @@ namespace SoftwareManagerApp
             }
             else if (currentImageData != null)
             {
-                // Проверка на существование записи для выбора между INSERT и UPDATE.
                 string sqlCheck = "SELECT COUNT(*) FROM Screenshots WHERE software_id = @id;";
                 long count;
                 using (var cmd = new NpgsqlCommand(sqlCheck, conn, transaction))
@@ -245,7 +161,7 @@ namespace SoftwareManagerApp
                     count = (long)cmd.ExecuteScalar();
                 }
 
-                if (count > 0)
+                if (count > 0) // Обновление существующего.
                 {
                     string sqlUpdate = "UPDATE Screenshots SET image_data = @data WHERE software_id = @id;";
                     using (var cmd = new NpgsqlCommand(sqlUpdate, conn, transaction))
@@ -255,7 +171,7 @@ namespace SoftwareManagerApp
                         cmd.ExecuteNonQuery();
                     }
                 }
-                else
+                else // Вставка нового.
                 {
                     string sqlInsert = "INSERT INTO Screenshots (software_id, image_data) VALUES (@id, @data);";
                     using (var cmd = new NpgsqlCommand(sqlInsert, conn, transaction))
@@ -268,7 +184,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Загрузка списка категорий в ComboBox.
+        // Загрузка списка категорий.
         private void LoadCategories()
         {
             try
@@ -276,13 +192,13 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT category_id, category_name FROM Categories ORDER BY category_name;";
+                    string sql = "SELECT category_name FROM Categories ORDER BY category_name;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            cmbCategory.Items.Add(new ComboBoxItem { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+                            cmbCategory.Items.Add(reader.GetString(0));
                         }
                     }
                 }
@@ -290,7 +206,7 @@ namespace SoftwareManagerApp
             catch (Exception ex) { MessageBox.Show($"Ошибка загрузки категорий: {ex.Message}"); }
         }
 
-        // Загрузка списка разработчиков в ComboBox.
+        // Загрузка списка разработчиков.
         private void LoadDevelopers()
         {
             try
@@ -298,13 +214,13 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT developer_id, developer_name FROM Developers ORDER BY developer_name;";
+                    string sql = "SELECT developer_name FROM Developers ORDER BY developer_name;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            cmbDeveloper.Items.Add(new ComboBoxItem { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+                            cmbDeveloper.Items.Add(reader.GetString(0));
                         }
                     }
                 }
@@ -320,7 +236,7 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT * FROM Software WHERE software_id = @id;";
+                    string sql = "SELECT s.*, c.category_name, d.developer_name FROM Software s LEFT JOIN Categories c ON s.category_id = c.category_id LEFT JOIN Developers d ON s.developer_id = d.developer_id WHERE software_id = @id;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("@id", softwareId);
@@ -333,10 +249,9 @@ namespace SoftwareManagerApp
                                 txtSystemReq.Text = reader["system_requirements"].ToString();
                                 txtWebsite.Text = reader["website"].ToString();
                                 numSize.Value = Convert.ToDecimal(reader["size_mb"]);
-                                int categoryId = Convert.ToInt32(reader["category_id"]);
-                                cmbCategory.SelectedItem = cmbCategory.Items.OfType<ComboBoxItem>().FirstOrDefault(item => item.Id == categoryId);
-                                int developerId = Convert.ToInt32(reader["developer_id"]);
-                                cmbDeveloper.SelectedItem = cmbDeveloper.Items.OfType<ComboBoxItem>().FirstOrDefault(item => item.Id == developerId);
+                                chkIsFree.Checked = Convert.ToBoolean(reader["is_free"]);
+                                cmbCategory.Text = reader["category_name"].ToString();
+                                cmbDeveloper.Text = reader["developer_name"].ToString();
                             }
                         }
                     }
@@ -357,18 +272,109 @@ namespace SoftwareManagerApp
                 MessageBox.Show("Поле 'Название' не может быть пустым.", "Ошибка валидации", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
-            if (cmbCategory.SelectedItem == null)
+            if (string.IsNullOrWhiteSpace(cmbCategory.Text))
             {
-                MessageBox.Show("Необходимо выбрать категорию.", "Ошибка валидации", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Необходимо выбрать или ввести категорию.", "Ошибка валидации", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
-            if (cmbDeveloper.SelectedItem == null)
+            if (string.IsNullOrWhiteSpace(cmbDeveloper.Text))
             {
-                MessageBox.Show("Необходимо выбрать разработчика.", "Ошибка валидации", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Необходимо выбрать или ввести разработчика.", "Ошибка валидации", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
             return true;
         }
-        #endregion
+
+        // Загрузка и отображение скриншота.
+        private void LoadScreenshot(int softwareId)
+        {
+            try
+            {
+                using (var conn = new NpgsqlConnection(connectionString))
+                {
+                    conn.Open();
+                    string sql = "SELECT image_data FROM Screenshots WHERE software_id = @id LIMIT 1;";
+                    using (var cmd = new NpgsqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@id", softwareId);
+                        var result = cmd.ExecuteScalar();
+
+                        if (result != null && result != DBNull.Value)
+                        {
+                            byte[] imageData = (byte[])result;
+                            this.currentImageData = imageData;
+
+                            try
+                            {
+                                using (var imageSharp = SixLabors.ImageSharp.Image.Load<Rgba32>(imageData))
+                                using (var ms = new MemoryStream())
+                                {
+                                    imageSharp.SaveAsBmp(ms);
+                                    ms.Position = 0;
+                                    picScreenshot.Image?.Dispose();
+                                    picScreenshot.Image = new System.Drawing.Bitmap(ms);
+                                }
+                            }
+                            catch { picScreenshot.Image = null; }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при загрузке скриншота: {ex.Message}");
+            }
+        }
+
+        // Открытие диалога выбора файла.
+        private void BtnLoadImage_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog openFileDialog = new OpenFileDialog())
+            {
+                openFileDialog.Title = "Выберите скриншот";
+                openFileDialog.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.gif;*.bmp";
+
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        byte[] fileBytes = File.ReadAllBytes(openFileDialog.FileName);
+
+                        using (Image<Rgba32> imageSharp = SixLabors.ImageSharp.Image.Load<Rgba32>(fileBytes))
+                        {
+                            using (var memoryStream = new MemoryStream())
+                            {
+                                imageSharp.SaveAsBmp(memoryStream);
+                                memoryStream.Position = 0;
+                                picScreenshot.Image?.Dispose();
+                                picScreenshot.Image = new System.Drawing.Bitmap(memoryStream);
+                            }
+                        }
+
+                        this.currentImageData = fileBytes;
+                        this.imageMarkedForDeletion = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Не удалось открыть файл изображения: {ex.Message}");
+                        currentImageData = null;
+                        picScreenshot.Image?.Dispose();
+                        picScreenshot.Image = null;
+                    }
+                }
+            }
+        }
+
+        // Удаление изображения из PictureBox.
+        private void BtnDeleteImage_Click(object sender, EventArgs e)
+        {
+            if (picScreenshot.Image != null)
+            {
+                picScreenshot.Image.Dispose();
+                picScreenshot.Image = null;
+                currentImageData = null;
+                imageMarkedForDeletion = true;
+            }
+        }
     }
 }

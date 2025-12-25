@@ -34,6 +34,10 @@
             this.groupBoxViewMode = new System.Windows.Forms.GroupBox();
             this.radioViewByCollection = new System.Windows.Forms.RadioButton();
             this.radioViewByCategory = new System.Windows.Forms.RadioButton();
+            this.btnChangeUser = new System.Windows.Forms.Button();
+            this.cmbLicenseFilter = new System.Windows.Forms.ComboBox();
+            this.labelLicense = new System.Windows.Forms.Label();
+            this.btnManageUsers = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.softwareDataGridView)).BeginInit();
             this.contextMenuStrip.SuspendLayout();
             this.groupBoxViewMode.SuspendLayout();
@@ -56,7 +60,7 @@
             this.categoriesComboBox.Name = "categoriesComboBox";
             this.categoriesComboBox.Size = new System.Drawing.Size(260, 23);
             this.categoriesComboBox.TabIndex = 1;
-            this.categoriesComboBox.SelectedIndexChanged += new System.EventHandler(this.CategoriesComboBox_SelectedIndexChanged);
+            this.categoriesComboBox.SelectedIndexChanged += new System.EventHandler(this.Filter_SelectedIndexChanged);
             // 
             // softwareLabel
             // 
@@ -85,7 +89,7 @@
             this.softwareDataGridView.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             this.softwareDataGridView.Size = new System.Drawing.Size(776, 383);
             this.softwareDataGridView.TabIndex = 3;
-            this.softwareDataGridView.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.SoftwareDataGridView_CellDoubleClick); // <<<====== ВОТ ЭТА СТРОКА
+            this.softwareDataGridView.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.SoftwareDataGridView_CellDoubleClick);
             // 
             // contextMenuStrip
             // 
@@ -165,7 +169,7 @@
             this.collectionsComboBox.Name = "collectionsComboBox";
             this.collectionsComboBox.Size = new System.Drawing.Size(260, 23);
             this.collectionsComboBox.TabIndex = 9;
-            this.collectionsComboBox.SelectedIndexChanged += new System.EventHandler(this.CollectionsComboBox_SelectedIndexChanged);
+            this.collectionsComboBox.SelectedIndexChanged += new System.EventHandler(this.Filter_SelectedIndexChanged);
             // 
             // btnManageCollections
             // 
@@ -212,11 +216,58 @@
             this.radioViewByCategory.UseVisualStyleBackColor = true;
             this.radioViewByCategory.CheckedChanged += new System.EventHandler(this.RadioView_CheckedChanged);
             // 
+            // btnChangeUser
+            // 
+            this.btnChangeUser.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnChangeUser.Location = new System.Drawing.Point(678, 12);
+            this.btnChangeUser.Name = "btnChangeUser";
+            this.btnChangeUser.Size = new System.Drawing.Size(110, 23);
+            this.btnChangeUser.TabIndex = 12;
+            this.btnChangeUser.Text = "Выйти";
+            this.btnChangeUser.UseVisualStyleBackColor = true;
+            this.btnChangeUser.Click += new System.EventHandler(this.BtnChangeUser_Click);
+            // 
+            // cmbLicenseFilter
+            // 
+            this.cmbLicenseFilter.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.cmbLicenseFilter.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cmbLicenseFilter.FormattingEnabled = true;
+            this.cmbLicenseFilter.Location = new System.Drawing.Point(678, 98);
+            this.cmbLicenseFilter.Name = "cmbLicenseFilter";
+            this.cmbLicenseFilter.Size = new System.Drawing.Size(110, 23);
+            this.cmbLicenseFilter.TabIndex = 13;
+            this.cmbLicenseFilter.SelectedIndexChanged += new System.EventHandler(this.Filter_SelectedIndexChanged);
+            // 
+            // labelLicense
+            // 
+            this.labelLicense.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.labelLicense.AutoSize = true;
+            this.labelLicense.Location = new System.Drawing.Point(609, 101);
+            this.labelLicense.Name = "labelLicense";
+            this.labelLicense.Size = new System.Drawing.Size(63, 15);
+            this.labelLicense.TabIndex = 14;
+            this.labelLicense.Text = "Лицензия:";
+            // 
+            // btnManageUsers
+            // 
+            this.btnManageUsers.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnManageUsers.Location = new System.Drawing.Point(350, 523);
+            this.btnManageUsers.Name = "btnManageUsers";
+            this.btnManageUsers.Size = new System.Drawing.Size(150, 30);
+            this.btnManageUsers.TabIndex = 15;
+            this.btnManageUsers.Text = "Упр. пользователями";
+            this.btnManageUsers.UseVisualStyleBackColor = true;
+            this.btnManageUsers.Click += new System.EventHandler(this.BtnManageUsers_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 565);
+            this.Controls.Add(this.btnManageUsers);
+            this.Controls.Add(this.labelLicense);
+            this.Controls.Add(this.cmbLicenseFilter);
+            this.Controls.Add(this.btnChangeUser);
             this.Controls.Add(this.groupBoxViewMode);
             this.Controls.Add(this.btnManageCollections);
             this.Controls.Add(this.collectionsComboBox);
@@ -233,6 +284,7 @@
             this.MinimumSize = new System.Drawing.Size(816, 489);
             this.Name = "Form1";
             this.Text = "Информационная система: Аналоги ПО";
+            this.Load += new System.EventHandler(this.Form1_Load);
             ((System.ComponentModel.ISupportInitialize)(this.softwareDataGridView)).EndInit();
             this.contextMenuStrip.ResumeLayout(false);
             this.groupBoxViewMode.ResumeLayout(false);
@@ -260,5 +312,9 @@
         private RadioButton radioViewByCategory;
         private ContextMenuStrip contextMenuStrip;
         private ToolStripMenuItem addToCollectionMenuItem;
+        private Button btnChangeUser;
+        private ComboBox cmbLicenseFilter;
+        private Label labelLicense;
+        private Button btnManageUsers;
     }
 }

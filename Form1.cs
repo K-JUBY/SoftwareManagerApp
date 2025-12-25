@@ -1,24 +1,47 @@
 using Npgsql;
 using System.Data;
 using System.ComponentModel;
+using System.Text;
 
 namespace SoftwareManagerApp
 {
     public partial class Form1 : Form
     {
-        // Строка подключения к базе данных PostgreSQL.
-        private readonly string connectionString = "Server=localhost;Port=5432;UserId=postgres;Password=postgres;Database=software_analogues;";
+        private readonly string connectionString = DbConnectionManager.ConnectionString;
+        // Флаг для управления циклом смены пользователя в Program.cs.
+        public bool IsUserChanged { get; private set; } = false;
 
         public Form1()
         {
             InitializeComponent();
-            // Первичная загрузка категорий при запуске формы.
-            LoadCategories();
         }
 
-        #region Загрузка данных
+        // Выполняется один раз при загрузке формы.
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            // Настройка видимости элементов управления в зависимости от роли пользователя.
+            if (CurrentUser.Role == "User")
+            {
+                btnAdd.Visible = false;
+                btnEdit.Visible = false;
+                btnDelete.Visible = false;
+                btnReports.Visible = false;
+                btnManageUsers.Visible = false;
+            }
 
-        // Загружает список категорий из БД в соответствующий ComboBox.
+            this.Text = $"Информационная система - [{CurrentUser.Username}]";
+
+            // Инициализация фильтра лицензий.
+            cmbLicenseFilter.Items.Add("Все программы");
+            cmbLicenseFilter.Items.Add("Бесплатные");
+            cmbLicenseFilter.Items.Add("Платные");
+            cmbLicenseFilter.SelectedIndex = 0;
+
+            LoadCategories();
+            ApplyFilters(); // Первичная загрузка данных.
+        }
+
+        // Загружает список категорий из БД.
         private void LoadCategories()
         {
             try
@@ -31,10 +54,14 @@ namespace SoftwareManagerApp
                     using (var reader = cmd.ExecuteReader())
                     {
                         categoriesComboBox.Items.Clear();
+                        // Добавление пункта "Все категории" для фильтрации.
+                        categoriesComboBox.Items.Add(new ComboBoxItem { Id = -1, Name = "Все категории" });
+
                         while (reader.Read())
                         {
                             categoriesComboBox.Items.Add(new ComboBoxItem { Id = reader.GetInt32(0), Name = reader.GetString(1) });
                         }
+                        categoriesComboBox.SelectedIndex = 0;
                     }
                 }
             }
@@ -44,7 +71,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Загружает список подборок из БД в соответствующий ComboBox.
+        // Загружает список подборок, принадлежащих текущему пользователю.
         private void LoadCollections()
         {
             try
@@ -52,14 +79,21 @@ namespace SoftwareManagerApp
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT collection_id, collection_name FROM Collections ORDER BY collection_name;";
+                    string sql = "SELECT collection_id, collection_name FROM Collections WHERE user_id = @userId ORDER BY collection_name;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
-                    using (var reader = cmd.ExecuteReader())
                     {
-                        collectionsComboBox.Items.Clear();
-                        while (reader.Read())
+                        cmd.Parameters.AddWithValue("@userId", CurrentUser.UserId);
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            collectionsComboBox.Items.Add(new ComboBoxItem { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+                            collectionsComboBox.Items.Clear();
+                            while (reader.Read())
+                            {
+                                collectionsComboBox.Items.Add(new ComboBoxItem { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+                            }
+                            if (collectionsComboBox.Items.Count > 0)
+                            {
+                                collectionsComboBox.SelectedIndex = 0;
+                            }
                         }
                     }
                 }
@@ -70,31 +104,75 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Загружает программы для указанной категории.
-        private void LoadSoftwareForCategory(int categoryId)
+        // Центральный метод, применяющий все активные фильтры и обновляющий таблицу.
+        private void ApplyFilters()
         {
-            string sql = @"SELECT s.software_id, s.name AS ""Название"", d.developer_name AS ""Разработчик"", s.website AS ""Сайт"", s.description AS ""Описание""
+            string licenseFilterSql = "";
+            if (cmbLicenseFilter.SelectedIndex == 1) // Бесплатные
+            {
+                licenseFilterSql = " AND s.is_free = TRUE";
+            }
+            else if (cmbLicenseFilter.SelectedIndex == 2) // Платные
+            {
+                licenseFilterSql = " AND s.is_free = FALSE";
+            }
+
+            if (radioViewByCategory.Checked)
+            {
+                var selectedCategory = categoriesComboBox.SelectedItem as ComboBoxItem;
+                if (selectedCategory != null)
+                {
+                    LoadSoftwareForCategory(selectedCategory.Id, licenseFilterSql);
+                }
+            }
+            else if (radioViewByCollection.Checked)
+            {
+                var selectedCollection = collectionsComboBox.SelectedItem as ComboBoxItem;
+                if (selectedCollection != null)
+                {
+                    LoadSoftwareForCollection(selectedCollection.Id, licenseFilterSql);
+                }
+                else
+                {
+                    // Очистка таблицы, если у пользователя нет подборок.
+                    if (softwareDataGridView.DataSource != null) ((DataTable)softwareDataGridView.DataSource).Clear();
+                }
+            }
+        }
+
+        // Загружает программы для указанной категории с учетом фильтра лицензий.
+        private void LoadSoftwareForCategory(int categoryId, string licenseFilter)
+        {
+            var whereClause = new StringBuilder("WHERE 1=1");
+            if (categoryId != -1)
+            {
+                whereClause.Append(" AND s.category_id = @id");
+            }
+            whereClause.Append(licenseFilter);
+
+            string sql = $@"SELECT s.software_id, s.name AS ""Название"", d.developer_name AS ""Разработчик"", s.website AS ""Сайт"", s.description AS ""Описание""
                            FROM Software s
                            JOIN Developers d ON s.developer_id = d.developer_id
-                           WHERE s.category_id = @id
+                           {whereClause}
                            ORDER BY s.name;";
+
             ExecuteSoftwareQuery(sql, categoryId);
         }
 
-        // Загружает программы для указанной подборки.
-        private void LoadSoftwareForCollection(int collectionId)
+        // Загружает программы для указанной подборки с учетом фильтра лицензий.
+        private void LoadSoftwareForCollection(int collectionId, string licenseFilter)
         {
-            // Используется JOIN с промежуточной таблицей Software_Collections.
-            string sql = @"SELECT s.software_id, s.name AS ""Название"", d.developer_name AS ""Разработчик"", s.website AS ""Сайт"", s.description AS ""Описание""
+            string sql = $@"SELECT s.software_id, s.name AS ""Название"", d.developer_name AS ""Разработчик"", s.website AS ""Сайт"", s.description AS ""Описание""
                            FROM Software s
                            JOIN Developers d ON s.developer_id = d.developer_id
                            JOIN Software_Collections sc ON s.software_id = sc.software_id
-                           WHERE sc.collection_id = @id
+                           WHERE sc.collection_id = @id {licenseFilter}
                            ORDER BY s.name;";
+
             ExecuteSoftwareQuery(sql, collectionId);
         }
 
-        // Универсальный метод для выполнения запроса и заполнения DataGridView.
+        // Универсальный метод для выполнения SQL-запроса и заполнения DataGridView.
         private void ExecuteSoftwareQuery(string sql, int id)
         {
             try
@@ -104,13 +182,17 @@ namespace SoftwareManagerApp
                     conn.Open();
                     using (var cmd = new NpgsqlCommand(sql, conn))
                     {
-                        cmd.Parameters.AddWithValue("@id", id);
+                        // Привязка параметра @id, если он используется в запросе (не равен -1).
+                        if (id != -1)
+                        {
+                            cmd.Parameters.AddWithValue("@id", id);
+                        }
+
                         var dataAdapter = new NpgsqlDataAdapter(cmd);
                         var dataTable = new DataTable();
                         dataAdapter.Fill(dataTable);
                         softwareDataGridView.DataSource = dataTable;
 
-                        // Скрытие служебной колонки с идентификатором программы.
                         if (softwareDataGridView.Columns["software_id"] != null)
                         {
                             softwareDataGridView.Columns["software_id"].Visible = false;
@@ -123,9 +205,6 @@ namespace SoftwareManagerApp
                 MessageBox.Show($"Ошибка при загрузке программ: {ex.Message}");
             }
         }
-        #endregion
-
-        #region Обработчики событий
 
         // Обработчик смены режима просмотра (Категория/Подборка).
         private void RadioView_CheckedChanged(object sender, EventArgs e)
@@ -137,26 +216,13 @@ namespace SoftwareManagerApp
             {
                 LoadCollections();
             }
-
-            // Очистка таблицы при смене режима.
-            if (softwareDataGridView.DataSource != null)
-            {
-                ((DataTable)softwareDataGridView.DataSource).Clear();
-            }
+            ApplyFilters();
         }
 
-        // Обработчик выбора элемента в списке категорий.
-        private void CategoriesComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        // Общий обработчик для всех фильтрующих ComboBox.
+        private void Filter_SelectedIndexChanged(object sender, EventArgs e)
         {
-            var selectedCategory = categoriesComboBox.SelectedItem as ComboBoxItem;
-            if (selectedCategory != null) LoadSoftwareForCategory(selectedCategory.Id);
-        }
-
-        // Обработчик выбора элемента в списке подборок.
-        private void CollectionsComboBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            var selectedCollection = collectionsComboBox.SelectedItem as ComboBoxItem;
-            if (selectedCollection != null) LoadSoftwareForCollection(selectedCollection.Id);
+            ApplyFilters();
         }
 
         // Открывает форму управления подборками.
@@ -165,6 +231,7 @@ namespace SoftwareManagerApp
             using (var managerForm = new CollectionsManagerForm())
             {
                 managerForm.ShowDialog(this);
+                // Обновление списка подборок после закрытия формы менеджера.
                 if (radioViewByCollection.Checked)
                 {
                     LoadCollections();
@@ -172,32 +239,34 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Обработчик события перед открытием контекстного меню.
+        // Динамическое формирование контекстного меню перед его открытием.
         private void ContextMenuStrip_Opening(object sender, CancelEventArgs e)
         {
             addToCollectionMenuItem.DropDownItems.Clear();
             if (softwareDataGridView.SelectedRows.Count == 0)
             {
-                e.Cancel = true; // Отменяем открытие меню, если ничего не выбрано.
+                e.Cancel = true;
                 return;
             }
 
-            // Динамическое формирование подменю со списком подборок.
             try
             {
                 using (var conn = new NpgsqlConnection(connectionString))
                 {
                     conn.Open();
-                    string sql = "SELECT collection_id, collection_name FROM Collections ORDER BY collection_name;";
+                    string sql = "SELECT collection_id, collection_name FROM Collections WHERE user_id = @userId ORDER BY collection_name;";
                     using (var cmd = new NpgsqlCommand(sql, conn))
-                    using (var reader = cmd.ExecuteReader())
                     {
-                        while (reader.Read())
+                        cmd.Parameters.AddWithValue("@userId", CurrentUser.UserId);
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            var item = new ToolStripMenuItem(reader.GetString(1));
-                            item.Tag = reader.GetInt32(0); // Сохраняем ID в свойстве Tag.
-                            item.Click += AddToCollection_Click;
-                            addToCollectionMenuItem.DropDownItems.Add(item);
+                            while (reader.Read())
+                            {
+                                var item = new ToolStripMenuItem(reader.GetString(1));
+                                item.Tag = reader.GetInt32(0); // Сохранение ID подборки в Tag.
+                                item.Click += AddToCollection_Click;
+                                addToCollectionMenuItem.DropDownItems.Add(item);
+                            }
                         }
                     }
                 }
@@ -205,7 +274,7 @@ namespace SoftwareManagerApp
             catch (Exception ex) { MessageBox.Show($"Ошибка загрузки подборок для меню: {ex.Message}"); }
         }
 
-        // Обработчик клика по подменю "Добавить в подборку".
+        // Добавляет выбранные программы в указанную подборку.
         private void AddToCollection_Click(object sender, EventArgs e)
         {
             var menuItem = (ToolStripMenuItem)sender;
@@ -224,7 +293,7 @@ namespace SoftwareManagerApp
                     conn.Open();
                     foreach (var softwareId in selectedSoftwareIds)
                     {
-                        // ON CONFLICT DO NOTHING предотвращает ошибку при попытке добавить дубликат.
+                        // ON CONFLICT DO NOTHING предотвращает ошибку при дублировании записи.
                         string sql = "INSERT INTO Software_Collections (software_id, collection_id) VALUES (@s_id, @c_id) ON CONFLICT DO NOTHING;";
                         using (var cmd = new NpgsqlCommand(sql, conn))
                         {
@@ -242,7 +311,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Обработчик двойного клика по ячейке для просмотра детальной информации.
+        // Открывает форму детального просмотра по двойному клику.
         private void SoftwareDataGridView_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0)
@@ -254,23 +323,20 @@ namespace SoftwareManagerApp
                 }
             }
         }
-        #endregion
 
-        #region Кнопки (CRUD, Сравнение, Отчеты)
-
+        // Открывает форму добавления новой программы.
         private void BtnAdd_Click(object sender, EventArgs e)
         {
             using (var detailsForm = new SoftwareDetailsForm())
             {
                 if (detailsForm.ShowDialog(this) == DialogResult.OK)
                 {
-                    // Обновление активного представления.
-                    if (radioViewByCategory.Checked) CategoriesComboBox_SelectedIndexChanged(null, null);
-                    if (radioViewByCollection.Checked) CollectionsComboBox_SelectedIndexChanged(null, null);
+                    ApplyFilters(); // Обновление данных после добавления.
                 }
             }
         }
 
+        // Открывает форму редактирования выбранной программы.
         private void BtnEdit_Click(object sender, EventArgs e)
         {
             if (softwareDataGridView.SelectedRows.Count == 0) return;
@@ -279,12 +345,12 @@ namespace SoftwareManagerApp
             {
                 if (detailsForm.ShowDialog(this) == DialogResult.OK)
                 {
-                    if (radioViewByCategory.Checked) CategoriesComboBox_SelectedIndexChanged(null, null);
-                    if (radioViewByCollection.Checked) CollectionsComboBox_SelectedIndexChanged(null, null);
+                    ApplyFilters(); // Обновление данных после редактирования.
                 }
             }
         }
 
+        // Удаляет выбранную программу после подтверждения.
         private void BtnDelete_Click(object sender, EventArgs e)
         {
             if (softwareDataGridView.SelectedRows.Count == 0) return;
@@ -305,13 +371,13 @@ namespace SoftwareManagerApp
                             cmd.ExecuteNonQuery();
                         }
                     }
-                    if (radioViewByCategory.Checked) CategoriesComboBox_SelectedIndexChanged(null, null);
-                    if (radioViewByCollection.Checked) CollectionsComboBox_SelectedIndexChanged(null, null);
+                    ApplyFilters(); // Обновление данных после удаления.
                 }
                 catch (Exception ex) { MessageBox.Show($"Ошибка удаления: {ex.Message}"); }
             }
         }
 
+        // Открывает форму сравнения программ.
         private void BtnCompare_Click(object sender, EventArgs e)
         {
             if (softwareDataGridView.SelectedRows.Count < 2)
@@ -330,6 +396,7 @@ namespace SoftwareManagerApp
             }
         }
 
+        // Открывает форму отчетов.
         private void BtnReports_Click(object sender, EventArgs e)
         {
             using (var reportsForm = new ReportsForm())
@@ -337,6 +404,21 @@ namespace SoftwareManagerApp
                 reportsForm.ShowDialog(this);
             }
         }
-        #endregion
+
+        // Открывает форму управления пользователями.
+        private void BtnManageUsers_Click(object sender, EventArgs e)
+        {
+            using (var userManagerForm = new UserManagerForm())
+            {
+                userManagerForm.ShowDialog(this);
+            }
+        }
+
+        // Устанавливает флаг смены пользователя и закрывает форму.
+        private void BtnChangeUser_Click(object sender, EventArgs e)
+        {
+            this.IsUserChanged = true;
+            this.Close();
+        }
     }
 }

@@ -1,26 +1,28 @@
 ﻿using Npgsql;
 using System.Data;
+using System.IO;
+using System.Text;
 
 namespace SoftwareManagerApp
 {
     public partial class ReportsForm : Form
     {
-        private readonly string connectionString = "Server=localhost;Port=5432;UserId=postgres;Password=postgres;Database=software_analogues;";
+        private readonly string connectionString = DbConnectionManager.ConnectionString;
 
         public ReportsForm()
         {
             InitializeComponent();
         }
 
-        // Заполнение списка доступных отчетов.
         private void ReportsForm_Load(object sender, EventArgs e)
         {
+            cmbReportType.Items.Add("Все программы в базе данных");
             cmbReportType.Items.Add("Количество программ по категориям");
             cmbReportType.Items.Add("Программы по разработчикам");
             cmbReportType.SelectedIndex = 0;
         }
 
-        // Отображение/скрытие дополнительных параметров в зависимости от типа отчета.
+        // Управляет видимостью дополнительных полей в зависимости от типа отчета.
         private void CmbReportType_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cmbReportType.SelectedItem.ToString() == "Программы по разработчикам")
@@ -37,7 +39,7 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Загрузка списка разработчиков для отчета.
+        // Загружает список разработчиков для фильтра отчета.
         private void LoadDevelopers()
         {
             cmbParameter.Items.Clear();
@@ -63,12 +65,16 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Выбор и запуск формирования нужного отчета.
+        // Запускает формирование выбранного отчета.
         private void BtnGenerateReport_Click(object sender, EventArgs e)
         {
             string selectedReport = cmbReportType.SelectedItem.ToString();
 
-            if (selectedReport == "Количество программ по категориям")
+            if (selectedReport == "Все программы в базе данных")
+            {
+                GenerateAllSoftwareReport();
+            }
+            else if (selectedReport == "Количество программ по категориям")
             {
                 GenerateCategoryCountReport();
             }
@@ -84,10 +90,28 @@ namespace SoftwareManagerApp
             }
         }
 
-        // Формирование отчета по количеству программ в категориях.
+        // Формирует отчет со списком всех программ.
+        private void GenerateAllSoftwareReport()
+        {
+            string sql = @"
+                SELECT 
+                    s.name AS ""Название"",
+                    c.category_name AS ""Категория"",
+                    d.developer_name AS ""Разработчик"",
+                    CASE WHEN s.is_free THEN 'Бесплатная' ELSE 'Платная' END AS ""Лицензия"",
+                    s.size_mb AS ""Объем (МБ)"",
+                    s.website AS ""Сайт""
+                FROM Software s
+                LEFT JOIN Categories c ON s.category_id = c.category_id
+                LEFT JOIN Developers d ON s.developer_id = d.developer_id
+                ORDER BY s.name;";
+
+            ExecuteReportQuery(sql);
+        }
+
+        // Формирует отчет с подсчетом программ в каждой категории.
         private void GenerateCategoryCountReport()
         {
-            // LEFT JOIN используется, чтобы включить в отчет категории без программ (с 0).
             string sql = @"
                 SELECT c.category_name AS ""Категория"", COUNT(s.software_id) AS ""Количество программ""
                 FROM Categories c
@@ -98,7 +122,7 @@ namespace SoftwareManagerApp
             ExecuteReportQuery(sql);
         }
 
-        // Формирование отчета по программам указанного разработчика.
+        // Формирует отчет со списком программ указанного разработчика.
         private void GenerateDeveloperSoftwareReport(int developerId)
         {
             string sql = $@"
@@ -111,7 +135,7 @@ namespace SoftwareManagerApp
             ExecuteReportQuery(sql);
         }
 
-        // Общий метод для выполнения SQL-запроса и вывода результата в DataGridView.
+        // Универсальный метод для выполнения запроса и вывода результата.
         private void ExecuteReportQuery(string sql)
         {
             try
@@ -130,6 +154,51 @@ namespace SoftwareManagerApp
             catch (Exception ex)
             {
                 MessageBox.Show($"Ошибка при формировании отчета: {ex.Message}");
+            }
+        }
+
+        // Экспортирует данные из DataGridView в CSV файл.
+        private void BtnExportCsv_Click(object sender, EventArgs e)
+        {
+            if (reportDataGridView.Rows.Count == 0)
+            {
+                MessageBox.Show("Нет данных для экспорта.", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.Filter = "CSV файл (*.csv)|*.csv";
+                saveFileDialog.Title = "Сохранить отчет как CSV";
+                saveFileDialog.FileName = $"Report_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+                if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        var sb = new StringBuilder();
+
+                        // Формирование заголовков.
+                        var headers = reportDataGridView.Columns.Cast<DataGridViewColumn>();
+                        sb.AppendLine(string.Join(";", headers.Select(column => $"\"{column.HeaderText}\"")));
+
+                        // Формирование строк с данными.
+                        foreach (DataGridViewRow row in reportDataGridView.Rows)
+                        {
+                            var cells = row.Cells.Cast<DataGridViewCell>();
+                            sb.AppendLine(string.Join(";", cells.Select(cell => $"\"{cell.Value}\"")));
+                        }
+
+                        // Сохранение в файл с кодировкой UTF-8 для поддержки кириллицы.
+                        File.WriteAllText(saveFileDialog.FileName, sb.ToString(), Encoding.UTF8);
+
+                        MessageBox.Show("Отчет успешно экспортирован!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Ошибка при экспорте файла: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
             }
         }
     }
